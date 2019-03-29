@@ -17,15 +17,15 @@
   "author": "Ragotzy.devin <devin.ragotzy@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "fs-extra": "^7.0.0",
+    "fs-extra": "^7.0.1",
     "help-parser": "^0.3.1",
     "parse-help": "^1.0.0",
     "trie-search": "^1.2.9"
   },
   "devDependencies": {
     "eslint": "^4.19.1",
-    "eslint-config-airbnb-base": "^13.0.0",
-    "eslint-plugin-import": "^2.13.0",
-    "tap": "^12.1.0"
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-import": "^2.16.0",
+    "tap": "^12.6.1"
   }
 }
