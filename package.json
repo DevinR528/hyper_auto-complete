@@ -18,8 +18,8 @@
   "license": "MIT",
   "dependencies": {
     "fs-extra": "^7.0.1",
-    "help-parser": "^0.3.1",
-    "parse-help": "^1.0.0",
+    "help-parser": "^1.1.0",
+    "lokijs": "^1.5.6",
     "trie-search": "^1.2.9"
   },
   "devDependencies": {

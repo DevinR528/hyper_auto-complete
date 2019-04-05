@@ -10,6 +10,7 @@
       "class-methods-use-this": "off",
       "brace-style": "off",
       "for-direction": "off",
-      "no-undef": "off"
+      "no-undef": "off",
+      "no-multiple-empty-lines": "off"
     }
   }
