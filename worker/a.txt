@@ -1,0 +1,16 @@
+node
+pack
+npm
+npx
+hyper
+pika-pack
+lpinfo
+alias
+bg
+bind
+break
+builtin
+caller
+cd
+command
+compgen

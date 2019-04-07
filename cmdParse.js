@@ -9,126 +9,81 @@ const {
 // eslint-disable-next-line import/no-unresolved
 } = require('worker_threads');
 const fs = require('fs');
+const { Transform } = require('stream');
 
 const helpParser = require('help-parser');
 
-/**
-   * @function
-   * @param {String} command
-   * @returns {Promise<Object>}
+
+class CommandPipe extends Transform {
+  /**
+   * Creates an instance of CommandPipe.
+   * @param  {Array} cmds
+   * @param  {Object} opts
+   * @memberof CommandPipe
    */
-function cmdParser(command) {
-  return new Promise((resolve, reject) => {
-    const cmdEcho = `echo "\`${command} --help\`"`;
-    cp.exec(cmdEcho, (err, stout, stin) => {
-      if (err) {
-        console.log(command);
-        // we need every element in the promise array to be something
-        resolve(null);
-      }
-      try {
-        const helpObj = helpParser(stout, command);
-        resolve(helpObj);
-      } catch (e) {
-        resolve(null);
-      }
-    });
-  });
+  constructor(cmds, opts) {
+    super(opts);
+
+    this.cmds = cmds;
+    this.cmdIdx = 0;
+    this.helpArr = [];
+
+    this.writeReady = false;
+  }
+
+  _transform(chunk, enc, cb) {
+    const help = chunk.toString();
+
+    const cmd = this.cmds[this.cmdIdx];
+    this.helpArr.push(helpParser(help, cmd));
+
+    this.cmdIdx++;
+    if (this.cmdIdx === this.cmds.length) {
+      this.emit('done', this.helpArr);
+    }
+    this.emit('ready');
+    cb();
+  }
 }
 
-function cmdParserStream(commands) {
-  const cmdArr = commands.split('\n');
-  const helpArr = [];
-  let left = 0;
+function run(location) {
+  return new Promise((resolve, reject) => {
+    const text = fs.readFileSync(location, { encoding: 'utf8' });
+    const cmdArr = text.split('\n');
 
-  const child = cp.spawn('sh');
-  child.stdin.setEncoding('utf-8');
+    let left = 0;
+    const child = cp.spawn('sh');
+    child.stdin.setEncoding('utf8');
+    child.ref();
 
-  child.on('error', (err) => {
-    console.log(err);
-  });
-  child.stdout.on('data', (chunk) => {
-    console.timeLog('cmd finished');
-    const command = cmdArr[left];
-    left++;
-    if (left === cmdArr.length) child.emit('done', helpArr);
-    const help = chunk.toString();
-    helpArr.push(helpParser(help, command));
-  });
-  child.on('done', (helps) => {
-    console.log(helps[5]);
-    child.kill();
-  });
+    child.on('error', (err) => {
+      console.log(err);
+      reject(err);
+    });
 
-  for (let i = 0; i < cmdArr.length; i++) {
-    const command = cmdArr[i];
-    const cmdEcho = `echo "\`${command} --help\`"\n`;
+    const cmdPipe = new CommandPipe(cmdArr, { encoding: 'utf8' });
+    child.stdout.pipe(cmdPipe);
+
+    cmdPipe.on('done', (helps) => {
+      child.kill();
+      resolve(helps);
+    });
+
+    cmdPipe.on('ready', () => {
+      left++;
+      const cmdEcho = `echo "\`${cmdArr[left]} --help\`"\n`;
+      child.stdin.write(cmdEcho, (err) => {
+        if (err) console.log(`write error: ${err}`);
+      });
+    });
+
+    const cmdEcho = `echo "\`${cmdArr[0]} --help\`"\n`;
     child.stdin.write(cmdEcho, (err) => {
       if (err) console.log(`write error: ${err}`);
     });
-  }
+  });
 }
 
-/**
- *
- * @param  {String} commands
- * @return {Promise}
- */
-async function genCmdObjects(commands) {
-  const cmdArr = commands.split('\n');
-  // const node = await cmdParser(commands);
-  // console.log(node);
-  const done = await Promise.all(cmdArr.map(cmdParser));
-  return done;
-}
-
-function* writeToChild(cmd, cp) {
-  cp.stdin.write(cmdEcho, (err) => {
-    if (err) console.log(`write error: ${err}`);
-  });
-  yield;
-}
-
-function* readFromChild(help) {
-  yield writeToChild();
-}
-
-(function run() {
-  const text = fs.readFileSync('./worker/b.txt', { encoding: 'utf8' });
-  console.time('end');
-  console.time('cmd finished');
-  const cmdArr = text.split('\n');
-  const helpArr = [];
-  let left = 0;
-
-  const child = cp.spawn('sh');
-  child.stdin.setEncoding('utf-8');
-
-  child.on('error', (err) => {
-    console.log(err);
-  });
-  child.stdout.on('data', function* dataGen(chunk) {
-    console.timeLog('cmd finished');
-    const command = cmdArr[left];
-    console.log(command);
-    left++;
-
-    if (left === cmdArr.length) {
-      child.emit('done', helpArr);
-    }
-    const help = chunk.toString();
-    helpArr.push(helpParser(help, command));
-    yield writeToChild(command, child);
-  });
-  child.on('done', (helps) => {
-    console.timeEnd('end');
-    console.log(helps[5]);
-    // child.kill();
-  });
-
-  for (let i = 0; i < cmdArr.length; i++) {
-    const command = cmdArr[i];
-    const cmdEcho = `echo "\`${command} --help\`"\n`;
-  }
-  // await genCmdObjects(text);
-}());
+run('./worker/a.txt').then((helps) => {
+  console.log(helps[helps.length - 1]);
+});
