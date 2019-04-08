@@ -9,12 +9,12 @@ const {
 // eslint-disable-next-line import/no-unresolved
 } = require('worker_threads');
 const fs = require('fs');
-const { Transform } = require('stream');
+const { Transform, Writable } = require('stream');
 
 const helpParser = require('help-parser');
 
 
-class CommandPipe extends Transform {
+class CommandPipe extends Writable {
   /**
    * Creates an instance of CommandPipe.
    * @param  {Array} cmds
@@ -28,20 +28,27 @@ class CommandPipe extends Transform {
     this.cmdIdx = 0;
     this.helpArr = [];
 
-    this.writeReady = false;
+    this.buffer = '';
   }
 
-  _transform(chunk, enc, cb) {
+  _write(chunk, enc, cb) {
     const help = chunk.toString();
+    // end of help symbol
+    if (help.includes('EOH00')) {
+      this.buffer += help.replace('EOH00\n', '');
+      const cmd = this.cmds[this.cmdIdx];
+      this.helpArr.push(helpParser(this.buffer, cmd));
 
-    const cmd = this.cmds[this.cmdIdx];
-    this.helpArr.push(helpParser(help, cmd));
-
-    this.cmdIdx++;
-    if (this.cmdIdx === this.cmds.length) {
-      this.emit('done', this.helpArr);
+      this.cmdIdx++;
+      if (this.cmdIdx === this.cmds.length) {
+        this.emit('done', this.helpArr);
+      } else {
+        this.buffer = '';
+        this.emit('ready', this.cmdIdx);
+      }
+    } else {
+      this.buffer += help;
     }
-    this.emit('ready');
     cb();
   }
 }
@@ -50,40 +57,56 @@ function run(location) {
   return new Promise((resolve, reject) => {
     const text = fs.readFileSync(location, { encoding: 'utf8' });
     const cmdArr = text.split('\n');
+    const cmdPipe = new CommandPipe(cmdArr);
 
-    let left = 0;
-    const child = cp.spawn('sh');
+    const child = cp.spawn('bash');
     child.stdin.setEncoding('utf8');
+    child.stdout.setEncoding('utf8');
     child.ref();
 
+    // this is the driving
+    child.stdout.pipe(cmdPipe);
+
     child.on('error', (err) => {
-      console.log(err);
+      console.log(`child: ${err}`);
       reject(err);
     });
 
-    const cmdPipe = new CommandPipe(cmdArr, { encoding: 'utf8' });
-    child.stdout.pipe(cmdPipe);
+    child.stdin.on('error', (err) => {
+      console.log(child);
+      console.log(child.stdin);
+      console.log(`child.stdin: ${err}`);
+    });
+
+    child.stdout.on('error', (err) => {
+      console.log(`child.stdout: ${err}`);
+    });
+
+    cmdPipe.on('error', (err) => {
+      console.log(`cmdPipe: ${err}`);
+      reject(err);
+    });
+
+    cmdPipe.on('ready', (idx) => {
+    //                                      end of help symbol
+      const cmdEcho = `echo "\`${cmdArr[idx]} --help\`";echo EOH00\n`;
+      child.stdin.write(cmdEcho);
+    });
 
     cmdPipe.on('done', (helps) => {
-      child.kill();
+      child.stdin.end();
+      child.unref();
       resolve(helps);
     });
 
-    cmdPipe.on('ready', () => {
-      left++;
-      const cmdEcho = `echo "\`${cmdArr[left]} --help\`"\n`;
-      child.stdin.write(cmdEcho, (err) => {
-        if (err) console.log(`write error: ${err}`);
-      });
-    });
-
-    const cmdEcho = `echo "\`${cmdArr[0]} --help\`"\n`;
-    child.stdin.write(cmdEcho, (err) => {
-      if (err) console.log(`write error: ${err}`);
-    });
+    //                                      end of help symbol
+    const cmdEcho = `echo "\`${cmdArr[0]} --help\`";echo EOH00\n`;
+    child.stdin.write(cmdEcho);
   });
 }
 
 run('./worker/a.txt').then((helps) => {
-  console.log(helps[helps.length - 1]);
+  console.log(helps);
+  console.log(helps.length);
 });
+
