@@ -24,7 +24,7 @@ class CommandPipe extends Writable {
   constructor(cmds, opts) {
     super(opts);
 
-    this.cmds = cmds;
+    this.cmds = Array.from(new Set(cmds));
     this.cmdIdx = 0;
     this.helpArr = [];
 
@@ -57,6 +57,7 @@ function run(location) {
   return new Promise((resolve, reject) => {
     const text = fs.readFileSync(location, { encoding: 'utf8' });
     const cmdArr = text.split('\n');
+
     const cmdPipe = new CommandPipe(cmdArr);
 
     const child = cp.spawn('bash');
@@ -65,17 +66,20 @@ function run(location) {
     child.ref();
 
     // this is the driving
+    // try dev/null try ref or pause or resume in class
+    // check getting stderr to stdout for parsing that
     child.stdout.pipe(cmdPipe);
 
     child.on('error', (err) => {
-      console.log(`child: ${err}`);
+      console.log(err);
       reject(err);
     });
 
     child.stdin.on('error', (err) => {
-      console.log(child);
-      console.log(child.stdin);
-      console.log(`child.stdin: ${err}`);
+      if (err.code === 'EPIPE') {
+        console.log('epipe');
+        resolve(cmdPipe.helpArr);
+      }
     });
 
     child.stdout.on('error', (err) => {
@@ -94,7 +98,8 @@ function run(location) {
     });
 
     cmdPipe.on('done', (helps) => {
-      child.stdin.end();
+      child.stdout.unpipe();
+      child.kill();
       child.unref();
       resolve(helps);
     });
@@ -105,8 +110,8 @@ function run(location) {
   });
 }
 
-run('./worker/a.txt').then((helps) => {
-  console.log(helps);
+run('./worker/cmds.txt').then((helps) => {
+  // console.log(helps);
   console.log(helps.length);
-});
+}).catch(err => console.log(err));
 

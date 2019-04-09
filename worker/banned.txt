@@ -24,4 +24,4 @@ coproc
 :
 [
 wish
-wish
+wish8.6

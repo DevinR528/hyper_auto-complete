@@ -107,8 +107,6 @@ chardetect
 pyvenv
 tic
 lzfgrep
-python3.7m
-pyvenv-3.7
 tput
 python3.7
 lzdiff
@@ -129,11 +127,9 @@ infocmp
 c_rehash
 captoinfo
 node
-pack
 npm
 npx
 hyper
-pika-pack
-lpinfo
 logrotate
 pwconv
+pika-pack
